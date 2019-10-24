@@ -22,3 +22,9 @@ target_link_libraries(icp_advance_api pointmatcher)
 
 add_executable(icp_customized icp_customized.cpp)
 target_link_libraries(icp_customized pointmatcher)
+
+add_executable(icp_with_cov icp_with_cov.cpp)
+target_link_libraries(icp_with_cov pointmatcher)
+
+add_executable(icp_without_cov icp_without_cov.cpp)
+target_link_libraries(icp_without_cov pointmatcher)
