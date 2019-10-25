@@ -49,6 +49,9 @@ typedef PointMatcherSupport::Parametrizable P;
 typedef Parametrizable::Parameters Parameters;
 typedef Parametrizable::ParameterDoc ParameterDoc;
 typedef Parametrizable::ParametersDoc ParametersDoc;
+typedef Parametrizable::ParametersDoc ParametersDoc;
+
+
 
 template<typename T>
 PointToPlaneWithCovErrorMinimizer<T>::PointToPlaneWithCovErrorMinimizer(const Parameters& params):
@@ -61,111 +64,166 @@ template<typename T>
 typename PointMatcher<T>::TransformationParameters PointToPlaneWithCovErrorMinimizer<T>::compute(const ErrorElements& mPts_const)
 {
 	ErrorElements mPts = mPts_const;
-    typename PointMatcher<T>::TransformationParameters out = PointToPlaneErrorMinimizer<T>::compute_in_place(mPts);
-
-    this->covMatrix = this->estimateCovariance(mPts, out);
-
-    return out;
+  typename PointMatcher<T>::TransformationParameters out = PointToPlaneErrorMinimizer<T>::compute_in_place(mPts);
+  Matrix mat;
+  this->estimateCovariance(mPts, out, this->censi_cov, this->bonnabel_cov);
+  return out;
 }
 
 template<typename T>
 typename PointMatcher<T>::Matrix
-PointToPlaneWithCovErrorMinimizer<T>::estimateCovariance(const ErrorElements& mPts, const TransformationParameters& transformation)
+PointToPlaneWithCovErrorMinimizer<T>::skew(const typename PointMatcher<T>::Vector vec)
 {
-    const int max_nbr_point = mPts.reading.getNbPoints();
+	Matrix mat(Matrix::Zero(3, 3));
+	mat(0, 1) = -vec(2);
+	mat(0, 2) = vec(1);
+	mat(1, 0) = vec(2);
+	mat(1, 0) = -vec(0);
+	mat(2, 0) = -vec(1);
+	mat(2, 1) = vec(0);
+	return mat;
+}
 
-    Matrix covariance(Matrix::Zero(6,6));
-    Matrix J_hessian(Matrix::Zero(6,6));
-    Matrix d2J_dReadingdX(Matrix::Zero(6, max_nbr_point));
-    Matrix d2J_dReferencedX(Matrix::Zero(6, max_nbr_point));
+template<typename T>
+void PointToPlaneWithCovErrorMinimizer<T>::estimateCovariance(
+	const ErrorElements& mPts, const TransformationParameters& transformation,
+	Matrix& censi_cov, Matrix& bonnabel_cov)
+{
 
-    Vector reading_point(Vector::Zero(3));
-    Vector reference_point(Vector::Zero(3));
-    Vector normal(3);
-    Vector reading_direction(Vector::Zero(3));
-    Vector reference_direction(Vector::Zero(3));
+	const int max_nbr_point = mPts.reading.getNbPoints();
 
-    //TODO: should be constView
-    Matrix normals = mPts.reference.getDescriptorViewByName("normals");
+	Matrix covariance(Matrix::Zero(6,6));
+	Matrix J_hessian(Matrix::Zero(6,6));
+	Matrix d2J_dReadingdX(Matrix::Zero(6, max_nbr_point));
+	Matrix d2J_dReferencedX(Matrix::Zero(6, max_nbr_point));
 
-    if (normals.rows() < 3)    // Make sure there are normals in DataPoints
-        return std::numeric_limits<T>::max() * Matrix::Identity(6,6);
+	Vector reading_point(Vector::Zero(3));
+	Vector reference_point(Vector::Zero(3));
+	Vector normal(3);
+	Vector reading_direction(Vector::Zero(3));
+	Vector reference_direction(Vector::Zero(3));
+  Vector tmp_vector_6(Vector::Zero(6));
 
-    T beta = -asin(transformation(2,0));
-    T alpha = atan2(transformation(2,1), transformation(2,2));
-    T gamma = atan2(transformation(1,0)/cos(beta), transformation(0,0)/cos(beta));
-    T t_x = transformation(0,3);
-    T t_y = transformation(1,3);
-    T t_z = transformation(2,3);
+	Matrix d2J_dZdX_bias_reading(Matrix::Zero(6, 1));
+	Matrix d2J_dZdX_bias_reference(Matrix::Zero(6, 1));
 
-    Vector tmp_vector_6(Vector::Zero(6));
+	Matrix normals = mPts.reference.getDescriptorViewByName("normals");
 
-    int valid_points_count = 0;
+	int valid_points_count = 0;
+	for(int i = 0; i < max_nbr_point; ++i)
+	{
+			reading_point = mPts.reading.features.block(0,i,3,1);
+			reference_point = mPts.reference.features.block(0,i,3,1);
 
-    //TODO: add missing const
-    for(int i = 0; i < max_nbr_point; ++i)
-    {
-        //if (outlierWeights(0,i) > 0.0)
-        {
-            reading_point = mPts.reading.features.block(0,i,3,1);
-            //int reference_idx = matches.ids(0,i);
-            reference_point = mPts.reference.features.block(0,i,3,1);
+			normal = normals.block(0,i,3,1);
+      T weight = mPts.weights(0, i);
+			T reading_range = reading_point.norm();
+			reading_direction = reading_point / reading_range;
+			T reference_range = reference_point.norm();
+			reference_direction = reference_point / reference_range;
 
-            normal = normals.block(0,i,3,1);
+      Vector tmp_vector_3 =  transformation.block(0,0,3,3) * reference_point + transformation.block(0,3,3,1);
+			T n_alpha = normal(2)*tmp_vector_3(1) - normal(1)*tmp_vector_3(2);
+			T n_beta = normal(0)*tmp_vector_3(2) - normal(2)*tmp_vector_3(0);
+			T n_gamma = normal(1)*tmp_vector_3(0) - normal(0)*tmp_vector_3(1);
 
-            T reading_range = reading_point.norm();
-            reading_direction = reading_point / reading_range;
-            T reference_range = reference_point.norm();
-            reference_direction = reference_point / reference_range;
+			// update the hessian and d2J/dzdx
+			tmp_vector_6 << reading_range * n_alpha, reading_range * n_beta, reading_range * n_gamma, normal(0), normal(1), normal(2);
+      tmp_vector_6 *= weight;
+			J_hessian += tmp_vector_6 * tmp_vector_6.transpose();
 
-            T n_alpha = normal(2)*reading_direction(1) - normal(1)*reading_direction(2);
-            T n_beta = normal(0)*reading_direction(2) - normal(2)*reading_direction(0);
-            T n_gamma = normal(1)*reading_direction(0) - normal(0)*reading_direction(1);
+      T tmp_scalar_read = normal(0) * reading_direction(0) + normal(1) * reading_direction(1) + normal(2) * reading_direction(2);
+      tmp_scalar_read = 1;
+      tmp_scalar_read *= weight;
+      d2J_dReadingdX.block(0,valid_points_count,6,1) = tmp_vector_6*tmp_scalar_read;
+      d2J_dZdX_bias_reading += tmp_vector_6*tmp_scalar_read;
 
-            T E = normal(0)*(reading_point(0) - gamma*reading_point(1) + beta*reading_point(2) + t_x - reference_point(0));
-            E +=  normal(1)*(gamma*reading_point(0) + reading_point(1) - alpha*reading_point(2) + t_y - reference_point(1));
-            E +=  normal(2)*(-beta*reading_point(0) + alpha*reading_point(1) + reading_point(2) + t_z - reference_point(2));
+      T tmp_scalar_ref = normal(0) * reference_direction(0) + normal(1) * reference_direction(1) + normal(2) * reference_direction(2);
+      tmp_scalar_ref = 1;
+      tmp_scalar_ref *= weight;
+			d2J_dReferencedX.block(0,valid_points_count, 6,1) = tmp_vector_6*tmp_scalar_ref;
+			d2J_dZdX_bias_reference += tmp_vector_6*tmp_scalar_ref;
+			valid_points_count++;
+	}
 
-            T N_reading = normal(0)*(reading_direction(0) - gamma*reading_direction(1) + beta*reading_direction(2));
-            N_reading +=  normal(1)*(gamma*reading_direction(0) + reading_direction(1) - alpha*reading_direction(2));
-            N_reading +=  normal(2)*(-beta*reading_direction(0) + alpha*reading_direction(1) + reading_direction(2));
+	Matrix d2J_dZdX(Matrix::Zero(6, 2 * valid_points_count));
+	d2J_dZdX.block(0,0,6,valid_points_count) = d2J_dReadingdX.block(0,0,6,valid_points_count);
+	d2J_dZdX.block(0,valid_points_count,6,valid_points_count) = d2J_dReferencedX.block(0,0,6,valid_points_count);
 
-            T N_reference = -(normal(0)*reference_direction(0) + normal(1)*reference_direction(1) + normal(2)*reference_direction(2));
+	Matrix inv_J_hessian = J_hessian.inverse();
 
-            // update the hessian and d2J/dzdx
-            tmp_vector_6 << normal(0), normal(1), normal(2), reading_range * n_alpha, reading_range * n_beta, reading_range * n_gamma;
-
-            J_hessian += tmp_vector_6 * tmp_vector_6.transpose();
-
-            tmp_vector_6 << normal(0) * N_reading, normal(1) * N_reading, normal(2) * N_reading, n_alpha * (E + reading_range * N_reading), n_beta * (E + reading_range * N_reading), n_gamma * (E + reading_range * N_reading);
-
-            d2J_dReadingdX.block(0,valid_points_count,6,1) = tmp_vector_6;
-
-            tmp_vector_6 << normal(0) * N_reference, normal(1) * N_reference, normal(2) * N_reference, reference_range * n_alpha * N_reference, reference_range * n_beta * N_reference, reference_range * n_gamma * N_reference;
-
-            d2J_dReferencedX.block(0,valid_points_count,6,1) = tmp_vector_6;
-
-            valid_points_count++;
-        } // if (outlierWeights(0,i) > 0.0)
-    }
-
-    Matrix d2J_dZdX(Matrix::Zero(6, 2 * valid_points_count));
-    d2J_dZdX.block(0,0,6,valid_points_count) = d2J_dReadingdX.block(0,0,6,valid_points_count);
-    d2J_dZdX.block(0,valid_points_count,6,valid_points_count) = d2J_dReferencedX.block(0,0,6,valid_points_count);
-
-    Matrix inv_J_hessian = J_hessian.inverse();
-
-    covariance = d2J_dZdX * d2J_dZdX.transpose();
-    covariance = inv_J_hessian * covariance * inv_J_hessian;
-
-    return (sensorStdDev * sensorStdDev) * covariance;
+	covariance = d2J_dZdX * d2J_dZdX.transpose();
+	censi_cov = inv_J_hessian * covariance * inv_J_hessian;
+  bonnabel_cov = Matrix::Zero(6,6);
+  bonnabel_cov += inv_J_hessian * d2J_dZdX_bias_reading * d2J_dZdX_bias_reading.transpose() * inv_J_hessian;
+	bonnabel_cov += inv_J_hessian * d2J_dZdX_bias_reference * d2J_dZdX_bias_reference.transpose() * inv_J_hessian;
+  bonnabel_cov += censi_cov;
 }
 
 
 template<typename T>
-typename PointMatcher<T>::Matrix PointToPlaneWithCovErrorMinimizer<T>::getCovariance() const
+typename PointMatcher<T>::Matrix PointToPlaneWithCovErrorMinimizer<T>::computeResidualErrors(ErrorElements mPts, const bool& force2D)
 {
-  return covMatrix;
+	const int dim = mPts.reading.features.rows();
+	const int nbPts = mPts.reading.features.cols();
+
+	// Adjust if the user forces 2D minimization on XY-plane
+	int forcedDim = dim - 1;
+	if(force2D && dim == 4)
+	{
+		mPts.reading.features.conservativeResize(3, Eigen::NoChange);
+		mPts.reading.features.row(2) = Matrix::Ones(1, nbPts);
+		mPts.reference.features.conservativeResize(3, Eigen::NoChange);
+		mPts.reference.features.row(2) = Matrix::Ones(1, nbPts);
+		forcedDim = dim - 2;
+	}
+
+	// Fetch normal vectors of the reference point cloud (with adjustment if needed)
+	const BOOST_AUTO(normalRef, mPts.reference.getDescriptorViewByName("normals").topRows(forcedDim));
+
+	// Note: Normal vector must be precalculated to use this error. Use appropriate input filter.
+	assert(normalRef.rows() > 0);
+
+	const Matrix deltas = mPts.reading.features - mPts.reference.features;
+
+	// dotProd = dot(deltas, normals) = d.n
+	Matrix dotProd = Matrix::Zero(1, normalRef.cols());
+	for(int i = 0; i < normalRef.rows(); i++)
+	{
+		dotProd += (deltas.row(i).array() * normalRef.row(i).array()).matrix();
+	}
+	// residual = (d.n) (no weight nor square)
+	dotProd = dotProd.array().matrix();
+
+	// return the norm of each dot product
+	return dotProd;
+}
+
+
+template<typename T>
+typename PointMatcher<T>::Matrix PointToPlaneWithCovErrorMinimizer<T>::getResidualErrors(
+	const DataPoints& filteredReading,
+	const DataPoints& filteredReference,
+	const OutlierWeights& outlierWeights,
+	const Matches& matches) const
+{
+	assert(matches.ids.rows() > 0);
+
+	// Fetch paired points
+	typename ErrorMinimizer::ErrorElements mPts(filteredReading, filteredReference, outlierWeights, matches);
+
+	return PointToPlaneWithCovErrorMinimizer::computeResidualErrors(mPts, false);
+}
+
+
+
+template<typename T>
+void PointToPlaneWithCovErrorMinimizer<T>::getCovariance(
+	Matrix& censi_cov, Matrix& bonnabel_cov)
+{
+
+	censi_cov = this->censi_cov;
+  bonnabel_cov = this->bonnabel_cov;
 }
 
 template struct PointToPlaneWithCovErrorMinimizer<float>;

@@ -269,12 +269,29 @@ typename PointMatcher<T>::Matrix PointMatcher<T>::ErrorMinimizer::getCovariance(
 	return Matrix::Zero(6,6);
 }
 
+
+
+//! If not redefined by child class, return zero matrix
+template<typename T>
+void PointMatcher<T>::ErrorMinimizer::getCovariance(Matrix& censi_cov, Matrix& bonnabel_cov)
+{
+	LOG_WARNING_STREAM("ErrorMinimizer - warning, no specific method to compute  covariance was provided for the ErrorMinimizer used.");
+}
+
 //! If not redefined by child class, return max value for T
 template<typename T>
 T PointMatcher<T>::ErrorMinimizer::getResidualError(const DataPoints& filteredReading, const DataPoints& filteredReference, const OutlierWeights& outlierWeights, const Matches& matches) const
 {
 	LOG_WARNING_STREAM("ErrorMinimizer - warning, no specific method to compute residual was provided for the ErrorMinimizer used.");
 	return std::numeric_limits<T>::max();
+}
+
+//! If not redefined by child class, return max value for T
+template<typename T>
+typename PointMatcher<T>::Matrix PointMatcher<T>::ErrorMinimizer::getResidualErrors(const DataPoints& filteredReading, const DataPoints& filteredReference, const OutlierWeights& outlierWeights, const Matches& matches) const
+{
+	LOG_WARNING_STREAM("ErrorMinimizer - warning, no specific method to compute residual was provided for the ErrorMinimizer used.");
+	return Matrix::Zero(1,1);
 }
 
 //! Helper funtion doing the cross product in 3D and a pseudo cross product in 2D

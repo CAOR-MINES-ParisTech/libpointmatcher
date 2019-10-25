@@ -57,6 +57,7 @@ struct PointToPlaneWithCovErrorMinimizer: public PointToPlaneErrorMinimizer<T>
     typedef typename PointMatcher<T>::Vector Vector;
     typedef typename PointMatcher<T>::Matrix Matrix;
 
+
     virtual inline const std::string name()
     {
         return "PointToPlaneWithCovErrorMinimizer";
@@ -76,12 +77,18 @@ struct PointToPlaneWithCovErrorMinimizer: public PointToPlaneErrorMinimizer<T>
     }
 
     const T sensorStdDev;
-    Matrix covMatrix;
+    Matrix censi_cov;
+    Matrix bonnabel_cov;
+	Matrix skew(Vector vec);
 
     PointToPlaneWithCovErrorMinimizer(const Parameters& params = Parameters());
     virtual TransformationParameters compute(const ErrorElements& mPts);
-    virtual Matrix getCovariance() const;
-    Matrix estimateCovariance(const ErrorElements& mPts, const TransformationParameters& transformation);
+    virtual void getCovariance(Matrix& censi_cov, Matrix& bonnabel_cov);
+    virtual Matrix getResidualErrors(const DataPoints& filteredReading, const DataPoints& filteredReference, const OutlierWeights& outlierWeights, const Matches& matches) const;
+    static Matrix computeResidualErrors(ErrorElements mPts, const bool& force2D);
+    void estimateCovariance(const ErrorElements& mPts, const TransformationParameters& transformation,
+      Matrix& censi_cov, Matrix& bonnabel_cov);
 };
 
 #endif
+

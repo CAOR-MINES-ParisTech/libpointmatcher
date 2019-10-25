@@ -1,0 +1,42 @@
+readingDataPointsFilters:
+  - MinDistDataPointsFilter:
+      dim: -1
+      minDist: 1
+  - RandomSamplingDataPointsFilter:
+      prob: 0.05
+
+referenceDataPointsFilters:
+  - MinDistDataPointsFilter:
+      dim: -1
+      minDist: 1
+  - SurfaceNormalDataPointsFilter:
+      knn: 7
+
+
+matcher:
+  KDTreeMatcher:
+    knn: 3
+
+outlierFilters:
+  - TrimmedDistOutlierFilter:
+      ratio: 0.7
+
+errorMinimizer:
+  PointToPlaneWithCovErrorMinimizer
+
+transformationCheckers:
+  - CounterTransformationChecker:
+      maxIterationCount: 150
+  - DifferentialTransformationChecker:
+      minDiffRotErr: 0.001
+      minDiffTransErr: 0.01
+
+inspector:
+  VTKFileInspector:
+     baseFileName : vissteps
+     dumpDataLinks : 0
+     dumpReading : 0
+     dumpReference : 0
+
+logger:
+  FileLogger

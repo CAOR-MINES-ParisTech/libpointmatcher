@@ -56,3 +56,4 @@ struct ErrorMinimizersImpl
 }; // ErrorMinimizersImpl
 
 #endif // __POINTMATCHER_ERRORMINIMIZER_H
+

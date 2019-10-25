@@ -543,8 +543,10 @@ struct PointMatcher
 		ErrorElements getErrorElements() const; //TODO: ensure that is return a usable value
 		virtual T getOverlap() const;
 		virtual Matrix getCovariance() const;
+        virtual void getCovariance(Matrix& censi_cov, Matrix& bonnabel_cov);
 		virtual T getResidualError(const DataPoints& filteredReading, const DataPoints& filteredReference, const OutlierWeights& outlierWeights, const Matches& matches) const;
-		
+		virtual Matrix getResidualErrors(const DataPoints& filteredReading, const DataPoints& filteredReference, const OutlierWeights& outlierWeights, const Matches& matches) const;
+
 		//! Find the transformation that minimizes the error
 		virtual TransformationParameters compute(const DataPoints& filteredReading, const DataPoints& filteredReference, const OutlierWeights& outlierWeights, const Matches& matches);
 		//! Find the transformation that minimizes the error given matched pair of points. This function most be defined for all new instances of ErrorMinimizer.
@@ -658,7 +660,7 @@ struct PointMatcher
 
 		virtual void setDefault();
 		
-		virtual void loadFromYaml(std::istream& in);
+		void loadFromYaml(std::istream& in);
 		unsigned getPrefilteredReadingPtsCount() const;
 		unsigned getPrefilteredReferencePtsCount() const;
 
@@ -733,8 +735,6 @@ struct PointMatcher
 		bool hasMap() const;
 		bool setMap(const DataPoints& map);
 		void clearMap();
-		virtual void setDefault();
-		virtual void loadFromYaml(std::istream& in);
 		PM_DEPRECATED("Use getPrefilteredInternalMap instead. "
 			            "Function now always returns map with filter chain applied. "
 			            "This may have altered your program behavior."

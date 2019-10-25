@@ -35,7 +35,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "pointmatcher/PointMatcher.h"
 #include "pointmatcher/Bibliography.h"
-
+ 
 #include "boost/filesystem.hpp"
 
 #include <cassert>
@@ -111,24 +111,24 @@ int main(int argc, const char *argv[])
 		}
 		icp.loadFromYaml(ifs);
 	}
-	
-	
+
+
 	int cloudDimension = ref.getEuclideanDim();
-	
-	if (!(cloudDimension == 2 || cloudDimension == 3)) 
+
+	if (!(cloudDimension == 2 || cloudDimension == 3))
 	{
 		cerr << "Invalid input point clouds dimension" << endl;
 		exit(1);
 	}
 
-	
+
 
 	PM::TransformationParameters translation =
 			parseTranslation(initTranslation, cloudDimension);
 	PM::TransformationParameters rotation =
 			parseRotation(initRotation, cloudDimension);
 	PM::TransformationParameters initTransfo = translation*rotation;
-	
+
 	std::shared_ptr<PM::Transformation> rigidTrans;
 	rigidTrans = PM::get().REG(Transformation).create("RigidTransformation");
 
@@ -185,7 +185,7 @@ int main(int argc, const char *argv[])
 			cerr << "Unable to write the complete transformation file\n" << endl;
 		}
 	}
-	else 
+	else
 	{
 		if(isVerbose)
 			cout << "ICP transformation:" << endl << T << endl;
@@ -414,6 +414,3 @@ void usage(const char *argv[])
 	cerr << "  " << argv[0] << " ../examples/data/car_cloud400.csv ../examples/data/car_cloud401.csv" << endl;
 	cerr << endl;
 }
-
-
-
